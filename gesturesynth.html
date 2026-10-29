@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<!--
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║               GestureSynth — Hand Motion Instrument              ║
+  ║                  Versi: 1.0 | Mode: Online CDN                   ║
+  ╠══════════════════════════════════════════════════════════════════╣
+  ║  CARA MENJADIKAN 100% OFFLINE (tanpa internet):                  ║
+  ║                                                                  ║
+  ║  1. Unduh file JS berikut & simpan di folder yang sama:          ║
+  ║                                                                  ║
+  ║  a) Tone.js:                                                     ║
+  ║     URL  : https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js
+  ║     Simpan: tone.js                                              ║
+  ║                                                                  ║
+  ║  b) MediaPipe Hands (paket lengkap via skypack/unpkg):           ║
+  ║     URL  : https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js
+  ║     Simpan: hands.js                                             ║
+  ║                                                                  ║
+  ║     URL  : https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js
+  ║     Simpan: camera_utils.js                                      ║
+  ║                                                                  ║
+  ║     URL  : https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js
+  ║     Simpan: drawing_utils.js                                     ║
+  ║                                                                  ║
+  ║     MediaPipe juga membutuhkan file WASM model. Unduh folder:    ║
+  ║     https://cdn.jsdelivr.net/npm/@mediapipe/hands/               ║
+  ║     (semua file .wasm, .bin, .tflite, .binarypb)                 ║
+  ║     Simpan di folder: ./mediapipe/                               ║
+  ║                                                                  ║
+  ║  2. Ganti tag <script src="..."> di bawah menjadi path lokal:   ║
+  ║     <script src="./tone.js"></script>                            ║
+  ║     <script src="./hands.js"></script>  dst.                     ║
+  ║                                                                  ║
+  ║  3. Ubah variabel locateFile di config Hands:                    ║
+  ║     locateFile: (f) => `./mediapipe/${f}`                        ║
+  ╚══════════════════════════════════════════════════════════════════╝
+-->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GestureSynth — Instrumen Gerakan Tangan</title>
+
+<!-- === PUSTAKA EKSTERNAL (CDN) === -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<style>
+  /* ——— RESET & BASE ——— */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:         #0a0a0f;
+    --surface:    #12121c;
+    --surface2:   #1a1a2a;
+    --border:     #2a2a40;
+    --accent:     #7b5ea7;
+    --accent2:    #4fc3f7;
+    --accent3:    #f06292;
+    --text:       #e8e6f0;
+    --text-muted: #6e6e90;
+    --green:      #4caf80;
+    --red:        #e05c6a;
+    --yellow:     #f0c060;
+    --radius:     12px;
+    --mono:       'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    overflow-x: hidden;
+  }
+
+  /* ——— LAYOUT ——— */
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  /* ——— HEADER ——— */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .logo-text {
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .logo-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: var(--mono);
+  }
+
+  /* ——— START OVERLAY ——— */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 15, 0.96);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    gap: 24px;
+    backdrop-filter: blur(6px);
+  }
+
+  .overlay-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 48px 56px;
+    text-align: center;
+    max-width: 480px;
+    width: 90%;
+  }
+
+  .overlay-icon {
+    font-size: 3.5rem;
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  .overlay-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    margin-bottom: 8px;
+  }
+
+  .overlay-desc {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.7;
+    margin-bottom: 28px;
+  }
+
+  #btn-start {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 36px;
+    background: linear-gradient(135deg, var(--accent), #5a3f8a);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 0 24px rgba(123, 94, 167, 0.4);
+  }
+
+  #btn-start:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 36px rgba(123, 94, 167, 0.6);
+  }
+
+  /* ——— MAIN CONTENT ——— */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 16px;
+    align-items: start;
+  }
+
+  /* ——— CANVAS SECTION ——— */
+  .canvas-wrap {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    aspect-ratio: 4/3;
+  }
+
+  #video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    transform: scaleX(-1);
+  }
+
+  /* Camera overlay label */
+  .cam-label {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: rgba(10, 10, 15, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.7rem;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .cam-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--red);
+    animation: pulse 1.4s infinite;
+  }
+
+  .cam-dot.active { background: var(--green); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ——— CHORD DISPLAY on canvas ——— */
+  .chord-overlay {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(10, 10, 15, 0.8);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 20px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    font-family: var(--mono);
+    letter-spacing: 0.05em;
+    color: var(--accent2);
+    pointer-events: none;
+    white-space: nowrap;
+    transition: opacity 0.3s;
+  }
+
+  /* ——— PANEL KANAN ——— */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+
+  .card-title {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    font-family: var(--mono);
+  }
+
+  /* ——— STATUS ROWS ——— */
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+
+  .stat-row:last-child { border-bottom: none; }
+
+  .stat-label {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-family: var(--mono);
+  }
+
+  .stat-value {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 0.85rem;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: var(--mono);
+  }
+
+  .badge.major { background: rgba(79, 195, 247, 0.15); color: var(--accent2); border: 1px solid rgba(79, 195, 247, 0.3); }
+  .badge.minor { background: rgba(240, 98, 146, 0.15); color: var(--accent3); border: 1px solid rgba(240, 98, 146, 0.3); }
+  .badge.silent { background: rgba(110, 110, 144, 0.15); color: var(--text-muted); border: 1px solid var(--border); }
+
+  /* ——— VOLUME BAR ——— */
+  .vol-bar-wrap {
+    height: 8px;
+    background: var(--surface2);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .vol-bar {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.1s;
+  }
+
+  /* ——— FINGER DISPLAY ——— */
+  .finger-row {
+    display: flex;
+    gap: 5px;
+    justify-content: center;
+    padding: 4px 0;
+  }
+
+  .finger {
+    width: 22px;
+    height: 30px;
+    border-radius: 10px 10px 4px 4px;
+    border: 1.5px solid var(--border);
+    background: var(--surface2);
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .finger.up {
+    background: var(--accent);
+    border-color: transparent;
+  }
+
+  .finger-label {
+    text-align: center;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    margin-top: 4px;
+  }
+
+  /* ——— EFFECT BARS ——— */
+  .effect-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+  }
+
+  .effect-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    width: 60px;
+    flex-shrink: 0;
+  }
+
+  .effect-bar-wrap {
+    flex: 1;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .effect-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.12s;
+  }
+
+  .bar-distortion { background: linear-gradient(90deg, var(--yellow), var(--red)); }
+  .bar-filter { background: linear-gradient(90deg, var(--green), var(--accent2)); }
+  .bar-octave { background: linear-gradient(90deg, var(--accent), var(--accent3)); }
+
+  /* ——— GUIDE CARD ——— */
+  .guide-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+  }
+
+  .guide-row:last-child { border-bottom: none; }
+
+  .guide-hand {
+    font-size: 1rem;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+  }
+
+  .guide-text {
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .guide-text strong {
+    color: var(--text);
+  }
+
+  /* ——— FOOTER ——— */
+  footer {
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    padding: 4px 0;
+  }
+
+  /* ——— RESPONSIVE ——— */
+  @media (max-width: 820px) {
+    .main {
+      grid-template-columns: 1fr;
+    }
+    .overlay-card { padding: 32px 24px; }
+  }
+
+  /* ——— WAVEFORM VISUALIZER ——— */
+  #waveCanvas {
+    width: 100%;
+    height: 48px;
+    display: block;
+    border-radius: 6px;
+    background: var(--surface2);
+  }
+
+  /* ——— Glowing note display ——— */
+  .note-glow {
+    text-align: center;
+    font-size: 2.4rem;
+    font-weight: 800;
+    font-family: var(--mono);
+    letter-spacing: -0.02em;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 12px rgba(79, 195, 247, 0.5));
+    line-height: 1;
+    padding: 8px 0 4px;
+    transition: all 0.2s;
+    min-height: 56px;
+  }
+
+  .note-quality {
+    text-align: center;
+    font-size: 0.7rem;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    letter-spacing: 0.1em;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== OVERLAY START ===== -->
+<div id="overlay">
+  <div class="overlay-card">
+    <span class="overlay-icon">🖐️</span>
+    <h1 class="overlay-title">GestureSynth</h1>
+    <p class="overlay-desc">
+      Mainkan musik dengan gerakan tangan Anda di depan kamera.<br>
+      <strong>Tangan kiri</strong> memilih akor &amp; kualitas — <strong>tangan kanan</strong> mengatur volume, oktaf, dan efek.
+    </p>
+    <button id="btn-start">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+      Mulai Audio &amp; Kamera
+    </button>
+  </div>
+</div>
+
+<!-- ===== APP SHELL ===== -->
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <svg class="logo-icon" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="18" cy="18" r="17" stroke="#7b5ea7" stroke-width="1.5"/>
+        <path d="M10 24 Q14 10 18 20 Q22 30 26 12" stroke="#4fc3f7" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <circle cx="18" cy="18" r="3" fill="#f06292" opacity="0.8"/>
+      </svg>
+      <div>
+        <div class="logo-text">GestureSynth</div>
+        <div class="logo-sub">hand motion instrument</div>
+      </div>
+    </div>
+    <div style="font-size:0.7rem; color:var(--text-muted); font-family:var(--mono);" id="fps-display">fps: —</div>
+  </header>
+
+  <div class="main">
+
+    <!-- ===== CANVAS ===== -->
+    <div class="canvas-wrap">
+      <video id="video" playsinline></video>
+      <canvas id="canvas"></canvas>
+
+      <div class="cam-label">
+        <div class="cam-dot" id="cam-dot"></div>
+        <span id="cam-status-label">Menginisialisasi…</span>
+      </div>
+
+      <div class="chord-overlay" id="chord-overlay">—</div>
+    </div>
+
+    <!-- ===== PANEL KANAN ===== -->
+    <div class="panel">
+
+      <!-- Nada aktif -->
+      <div class="card">
+        <div class="card-title">Nada Aktif</div>
+        <div class="note-glow" id="note-display">—</div>
+        <div class="note-quality" id="quality-display">SILENT</div>
+
+        <!-- Waveform -->
+        <canvas id="waveCanvas"></canvas>
+      </div>
+
+      <!-- Status tangan -->
+      <div class="card">
+        <div class="card-title">Status Tangan</div>
+
+        <!-- Tangan kiri -->
+        <div style="margin-bottom:10px;">
+          <div class="stat-label" style="margin-bottom:6px;">✋ TANGAN KIRI — Akor</div>
+          <div class="finger-row" id="left-fingers">
+            <div class="finger" title="Telunjuk"></div>
+            <div class="finger" title="Tengah"></div>
+            <div class="finger" title="Manis"></div>
+            <div class="finger" title="Kelingking"></div>
+            <div class="finger" title="Jempol"></div>
+          </div>
+          <div class="finger-label">↑ Angkat jari untuk pilih akor</div>
+        </div>
+
+        <!-- Tangan kanan -->
+        <div>
+          <div class="stat-label" style="margin-bottom:6px;">🤚 TANGAN KANAN — Kontrol</div>
+          <div class="finger-row" id="right-fingers">
+            <div class="finger"></div>
+            <div class="finger"></div>
+            <div class="finger"></div>
+            <div class="finger"></div>
+            <div class="finger"></div>
+          </div>
+          <div class="finger-label">↑ Jari menentukan oktaf</div>
+        </div>
+      </div>
+
+      <!-- Parameter -->
+      <div class="card">
+        <div class="card-title">Parameter Real-time</div>
+
+        <div class="stat-row">
+          <span class="stat-label">Akor</span>
+          <span class="stat-value" id="stat-chord">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Kualitas</span>
+          <span class="stat-value" id="stat-quality"><span class="badge silent">SILENT</span></span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Oktaf</span>
+          <span class="stat-value" id="stat-octave">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Volume</span>
+          <div style="flex:1;margin-left:12px;">
+            <div class="vol-bar-wrap"><div class="vol-bar" id="vol-bar" style="width:0%"></div></div>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <span class="stat-label">Jari Kiri</span>
+          <span class="stat-value" id="stat-left-count">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Jari Kanan</span>
+          <span class="stat-value" id="stat-right-count">0</span>
+        </div>
+      </div>
+
+      <!-- Efek -->
+      <div class="card">
+        <div class="card-title">Efek Audio</div>
+
+        <div class="effect-row">
+          <span class="effect-label">Distorsi</span>
+          <div class="effect-bar-wrap">
+            <div class="effect-bar bar-distortion" id="bar-dist" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="effect-row">
+          <span class="effect-label">Filter</span>
+          <div class="effect-bar-wrap">
+            <div class="effect-bar bar-filter" id="bar-filter" style="width:0%"></div>
+          </div>
+        </div>
+        <div class="effect-row">
+          <span class="effect-label">Oktaf</span>
+          <div class="effect-bar-wrap">
+            <div class="effect-bar bar-octave" id="bar-octave" style="width:33%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panduan -->
+      <div class="card">
+        <div class="card-title">Panduan Cepat</div>
+        <div class="guide-row">
+          <span class="guide-hand">✋</span>
+          <span class="guide-text"><strong>1–5 jari kiri</strong> → akor C D E F G<br><strong>Kepal</strong> → senyap</span>
+        </div>
+        <div class="guide-row">
+          <span class="guide-hand">↔️</span>
+          <span class="guide-text"><strong>Miring ke dalam</strong> → Major<br><strong>Miring ke luar</strong> → Minor</span>
+        </div>
+        <div class="guide-row">
+          <span class="guide-hand">🤚</span>
+          <span class="guide-text"><strong>Naik/Turun</strong> → Volume<br><strong>Maju/Mundur</strong> → Efek</span>
+        </div>
+        <div class="guide-row">
+          <span class="guide-hand">🖐️</span>
+          <span class="guide-text"><strong>1–2 jari kanan</strong> → Oktaf 3<br><strong>3–4 jari</strong> → Oktaf 4 · <strong>5 jari</strong> → 5</span>
+        </div>
+      </div>
+
+    </div><!-- /panel -->
+  </div><!-- /main -->
+
+  <footer>GestureSynth v1.0 — MediaPipe Hands + Tone.js · Berjalan lokal di browser Anda</footer>
+
+</div><!-- /app -->
+
+<!-- ===== JAVASCRIPT UTAMA ===== -->
+<script>
+"use strict";
+
+/* ═══════════════════════════════════════════════════════════
+   KONSTANTA & PEMETAAN AKOR
+═══════════════════════════════════════════════════════════ */
+
+// Pemetaan jumlah jari kiri → root note
+const CHORD_MAP = {
+  1: 'C',
+  2: 'D',
+  3: 'E',
+  4: 'F',
+  5: 'G',
+};
+
+// Definisi interval akor (dalam semitone dari root)
+const CHORD_INTERVALS = {
+  major: [0, 4, 7],       // Root, Major Third, Perfect Fifth
+  minor: [0, 3, 7],       // Root, Minor Third, Perfect Fifth
+};
+
+// Note-to-MIDI offset (dalam C octave)
+const NOTE_SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7 };
+
+// Nama nada MIDI → nama nada
+const MIDI_TO_NOTE = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+function midiToNoteName(midi) {
+  const note = MIDI_TO_NOTE[midi % 12];
+  const octave = Math.floor(midi / 12) - 1;
+  return note + octave;
+}
+
+function buildChordNotes(root, quality, octave) {
+  const rootSemi = NOTE_SEMITONES[root];
+  const baseMidi = (octave + 1) * 12 + rootSemi; // +1 for MIDI convention
+  return CHORD_INTERVALS[quality].map(interval => midiToNoteName(baseMidi + interval));
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TONE.JS — SETUP AUDIO ENGINE
+═══════════════════════════════════════════════════════════ */
+
+let audioReady = false;
+let synth = null;
+let distortion = null;
+let filter = null;
+let reverb = null;
+let analyser = null;
+let waveformData = null;
+
+function initAudio() {
+  if (audioReady) return;
+
+  // Master volume node
+  Tone.getDestination().volume.value = -12; // mulai agak pelan
+
+  // Analyser untuk waveform
+  analyser = new Tone.Analyser('waveform', 256);
+
+  // Efek chain: PolySynth → Distortion → Filter → Reverb → Analyser → Output
+  reverb = new Tone.Reverb({ decay: 1.8, wet: 0.25 }).toDestination();
+  reverb.connect(analyser);
+  analyser.connect(Tone.getDestination());
+
+  filter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 8000,
+    rolloff: -12,
+    Q: 1,
+  }).connect(reverb);
+
+  distortion = new Tone.Distortion({ distortion: 0, wet: 0 }).connect(filter);
+
+  synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    envelope: {
+      attack: 0.06,
+      decay: 0.2,
+      sustain: 0.7,
+      release: 0.8,
+    },
+    volume: -8,
+  }).connect(distortion);
+
+  audioReady = true;
+  console.log('[GestureSynth] Audio engine siap.');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STATE MUSIK — untuk mencegah stuttering
+═══════════════════════════════════════════════════════════ */
+const musicState = {
+  leftFingers: -1,       // -1 = belum ada tangan
+  chordQuality: '',      // 'major' | 'minor' | ''
+  octave: 4,
+  activeNotes: [],
+  isSounding: false,
+  volume: 0,             // 0–1
+  distAmt: 0,            // 0–1
+  filterFreq: 1,         // 0–1
+};
+
+function triggerChord(notes, quality) {
+  if (!audioReady || !synth) return;
+  // Hentikan nada lama dulu
+  if (musicState.activeNotes.length > 0) {
+    synth.triggerRelease(musicState.activeNotes, Tone.now());
+  }
+  // Mainkan nada baru
+  synth.triggerAttack(notes, Tone.now() + 0.01);
+  musicState.activeNotes = [...notes];
+  musicState.isSounding = true;
+}
+
+function silenceAll() {
+  if (!audioReady || !synth) return;
+  if (musicState.activeNotes.length > 0) {
+    synth.triggerRelease(musicState.activeNotes, Tone.now());
+    musicState.activeNotes = [];
+  }
+  musicState.isSounding = false;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MEDIAPIPE HANDS — DETEKSI TANGAN
+═══════════════════════════════════════════════════════════ */
+
+const videoEl = document.getElementById('video');
+const canvasEl = document.getElementById('canvas');
+const ctx = canvasEl.getContext('2d');
+
+// Landmark indices
+const LM = {
+  WRIST:        0,
+  THUMB_TIP:    4,
+  INDEX_MCP:    5,  INDEX_TIP:  8,
+  MIDDLE_TIP:  12,
+  RING_TIP:    16,
+  PINKY_MCP:  17,  PINKY_TIP: 20,
+};
+
+/* Hitung jari yang terangkat (5 jari: jempol + 4 jari lain) */
+function countFingers(landmarks) {
+  let count = 0;
+  const tips = [
+    { tip: 8,  pip: 6  },   // Telunjuk
+    { tip: 12, pip: 10 },   // Tengah
+    { tip: 16, pip: 14 },   // Manis
+    { tip: 20, pip: 18 },   // Kelingking
+  ];
+
+  // 4 jari (bukan jempol) — tip lebih tinggi (y kecil) dari pip
+  for (const { tip, pip } of tips) {
+    if (landmarks[tip].y < landmarks[pip].y) count++;
+  }
+
+  // Jempol: bandingkan tip.x vs ip.x (bergantung tangan kiri/kanan)
+  // Cara sederhana: jempol terangkat jika jarak tip ke wrist lebih jauh
+  const thumbTip  = landmarks[4];
+  const thumbMcp  = landmarks[2];
+  const wrist     = landmarks[0];
+  const thumbOut  = dist2D(thumbTip, wrist) > dist2D(thumbMcp, wrist) * 1.15;
+  if (thumbOut) count++;
+
+  return count;
+}
+
+/* Jarak 2D antara dua landmark */
+function dist2D(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/* Estimasi ukuran tangan (dipakai untuk depth/Z) */
+function handSize(landmarks) {
+  return dist2D(landmarks[LM.WRIST], landmarks[LM.MIDDLE_TIP]);
+}
+
+/* Deteksi kemiringan tangan kiri (roll) — major vs minor
+   Bandingkan posisi y antara INDEX_MCP dan PINKY_MCP.
+   Jika INDEX_MCP lebih tinggi (y lebih kecil) → miring ke dalam → major.
+   Jika PINKY_MCP lebih tinggi → miring ke luar → minor. */
+function detectRoll(landmarks) {
+  const idx = landmarks[LM.INDEX_MCP];
+  const pnk = landmarks[LM.PINKY_MCP];
+  // Roll value: positif = major, negatif = minor
+  return idx.y - pnk.y;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROSES HASIL DETEKSI TANGAN PER FRAME
+═══════════════════════════════════════════════════════════ */
+
+let lastFrameTime = performance.now();
+let frameCount = 0;
+
+function onHandResults(results) {
+  // Hitung FPS
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFrameTime >= 1000) {
+    document.getElementById('fps-display').textContent = `fps: ${frameCount}`;
+    frameCount = 0;
+    lastFrameTime = now;
+  }
+
+  // Gambar frame kamera ke canvas
+  canvasEl.width  = results.image.width;
+  canvasEl.height = results.image.height;
+
+  ctx.save();
+  ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+  ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
+
+  let leftHand  = null;
+  let rightHand = null;
+
+  if (results.multiHandLandmarks && results.multiHandedness) {
+    results.multiHandLandmarks.forEach((landmarks, i) => {
+      const handedness = results.multiHandedness[i].label; // 'Left' | 'Right'
+      // MediaPipe melabel "Left" untuk tangan yang dari kamera = tangan KANAN pengguna (mirror)
+      // Kita flip: jika label 'Left' (dari kamera) → tangan KANAN pengguna
+      const userHand = handedness === 'Left' ? 'Right' : 'Left';
+
+      if (userHand === 'Left')  leftHand  = landmarks;
+      if (userHand === 'Right') rightHand = landmarks;
+
+      // Warna skeleton bergantung tangan
+      const connColor = userHand === 'Left'
+        ? 'rgba(123, 94, 167, 0.85)'
+        : 'rgba(79, 195, 247, 0.85)';
+      const landColor = userHand === 'Left'
+        ? 'rgba(240, 98, 146, 1)'
+        : 'rgba(79, 195, 247, 1)';
+
+      // Gambar koneksi tangan (tulang)
+      drawHandConnections(landmarks, connColor);
+
+      // Gambar landmark (titik)
+      drawHandLandmarks(landmarks, landColor);
+
+      // Label tangan
+      const wrist = landmarks[LM.WRIST];
+      ctx.save();
+      ctx.scale(-1, 1); // counter-mirror untuk teks
+      const tx = -(wrist.x * canvasEl.width + 12);
+      const ty = wrist.y * canvasEl.height - 12;
+      ctx.font = 'bold 13px monospace';
+      ctx.fillStyle = connColor;
+      ctx.fillText(userHand === 'Left' ? '✋ KIRI' : '🤚 KANAN', tx, ty);
+      ctx.restore();
+    });
+  }
+
+  ctx.restore();
+
+  // ——— Update musik & UI ———
+  processGesture(leftHand, rightHand);
+  updateUI(leftHand, rightHand);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROSES GERAKAN → AUDIO
+═══════════════════════════════════════════════════════════ */
+
+function processGesture(leftHand, rightHand) {
+  if (!audioReady) return;
+
+  /* ——— TANGAN KANAN: Volume, Oktaf, Efek ——— */
+  if (rightHand) {
+    // Volume dari posisi Y pergelangan tangan kanan (atas = keras)
+    const wristY   = rightHand[LM.WRIST].y;   // 0 = atas, 1 = bawah
+    const volNorm  = Math.max(0, Math.min(1, 1 - wristY)); // 0–1
+    musicState.volume = volNorm;
+    // Map ke dB: -40 dB (senyap) → 0 dB (keras)
+    Tone.getDestination().volume.rampTo(-40 + volNorm * 40, 0.1);
+
+    // Oktaf dari jumlah jari kanan
+    const rFingers = countFingers(rightHand);
+    let octave = 4;
+    if (rFingers <= 2)      octave = 3;
+    else if (rFingers <= 4) octave = 4;
+    else                    octave = 5;
+    musicState.octave = octave;
+
+    // Efek dari "ukuran" tangan (depth/Z proxy)
+    // Tangan besar → maju ke kamera → lebih banyak efek
+    const hSize = handSize(rightHand);          // ~0.2 (jauh) – 0.6 (dekat)
+    const depthNorm = Math.max(0, Math.min(1, (hSize - 0.15) / 0.35));
+    musicState.distAmt  = depthNorm;
+    musicState.filterFreq = depthNorm;
+
+    // Apply efek ke Tone.js
+    if (distortion) {
+      distortion.distortion = depthNorm * 0.7;
+      distortion.wet.rampTo(depthNorm * 0.6, 0.12);
+    }
+    if (filter) {
+      // Filter sweep: 400–8000 Hz
+      const freq = 400 + depthNorm * 7600;
+      filter.frequency.rampTo(freq, 0.12);
+    }
+  } else {
+    // Tidak ada tangan kanan: volume pelan
+    Tone.getDestination().volume.rampTo(-40, 0.3);
+    musicState.volume = 0;
+  }
+
+  /* ——— TANGAN KIRI: Akor & Kualitas ——— */
+  if (leftHand) {
+    const lFingers = countFingers(leftHand);
+    const roll     = detectRoll(leftHand);
+    // roll > 0.03 = telapak miring ke dalam → major
+    // roll < -0.03 = miring ke luar → minor
+    const quality  = roll > 0.03 ? 'major' : 'minor';
+    const rootNote = CHORD_MAP[lFingers];
+
+    if (lFingers === 0) {
+      // Kepal = senyap
+      silenceAll();
+      musicState.leftFingers = 0;
+      musicState.chordQuality = '';
+    } else if (rootNote) {
+      const changed = (
+        lFingers  !== musicState.leftFingers ||
+        quality   !== musicState.chordQuality ||
+        musicState.octave !== (musicState._lastOctave ?? -1)
+      );
+
+      if (changed) {
+        const notes = buildChordNotes(rootNote, quality, musicState.octave);
+        triggerChord(notes, quality);
+        musicState.leftFingers  = lFingers;
+        musicState.chordQuality = quality;
+        musicState._lastOctave  = musicState.octave;
+      }
+    }
+  } else {
+    // Tangan kiri hilang → senyap
+    if (musicState.leftFingers !== -1) {
+      silenceAll();
+      musicState.leftFingers = -1;
+      musicState.chordQuality = '';
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   UPDATE UI
+═══════════════════════════════════════════════════════════ */
+
+const leftFingerEls  = document.querySelectorAll('#left-fingers .finger');
+const rightFingerEls = document.querySelectorAll('#right-fingers .finger');
+
+function updateUI(leftHand, rightHand) {
+  /* — Jari kiri — */
+  const lCount = leftHand ? countFingers(leftHand) : 0;
+  leftFingerEls.forEach((el, i) => {
+    el.classList.toggle('up', i < lCount);
+  });
+
+  /* — Jari kanan — */
+  const rCount = rightHand ? countFingers(rightHand) : 0;
+  rightFingerEls.forEach((el, i) => {
+    el.classList.toggle('up', i < rCount);
+  });
+
+  /* — Stats — */
+  document.getElementById('stat-left-count').textContent  = leftHand  ? lCount : '—';
+  document.getElementById('stat-right-count').textContent = rightHand ? rCount : '—';
+  document.getElementById('stat-octave').textContent      = rightHand ? musicState.octave : '—';
+
+  /* — Volume bar — */
+  const volPct = Math.round(musicState.volume * 100);
+  document.getElementById('vol-bar').style.width = volPct + '%';
+
+  /* — Efek bars — */
+  document.getElementById('bar-dist').style.width   = Math.round(musicState.distAmt * 100)   + '%';
+  document.getElementById('bar-filter').style.width = Math.round(musicState.filterFreq * 100) + '%';
+  const octPct = musicState.octave === 3 ? 20 : musicState.octave === 4 ? 53 : 86;
+  document.getElementById('bar-octave').style.width = octPct + '%';
+
+  /* — Akor & kualitas — */
+  const rootNote = CHORD_MAP[lCount] ?? null;
+  const quality  = musicState.chordQuality;
+  const isSounding = musicState.isSounding && lCount > 0;
+
+  let chordLabel = '—';
+  let qualityBadge = '<span class="badge silent">SILENT</span>';
+  let noteDisplay = '—';
+  let qualityDisplay = 'SILENT';
+
+  if (leftHand && lCount > 0 && rootNote) {
+    chordLabel = rootNote + (quality === 'major' ? '' : 'm');
+    qualityBadge = quality === 'major'
+      ? '<span class="badge major">MAJOR</span>'
+      : '<span class="badge minor">MINOR</span>';
+    noteDisplay = chordLabel;
+    qualityDisplay = quality === 'major' ? 'MAYOR · Oktaf ' + musicState.octave : 'MINOR · Oktaf ' + musicState.octave;
+  } else if (leftHand && lCount === 0) {
+    noteDisplay = '✊';
+    qualityDisplay = 'KEPAL · SENYAP';
+  }
+
+  document.getElementById('stat-chord').textContent   = chordLabel;
+  document.getElementById('stat-quality').innerHTML   = qualityBadge;
+  document.getElementById('note-display').textContent = noteDisplay;
+  document.getElementById('quality-display').textContent = qualityDisplay;
+  document.getElementById('chord-overlay').textContent = isSounding ? chordLabel + ' ' + musicState.octave : '—';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   WAVEFORM VISUALIZER
+═══════════════════════════════════════════════════════════ */
+
+const waveCanvas = document.getElementById('waveCanvas');
+const wCtx = waveCanvas.getContext('2d');
+
+function drawWaveform() {
+  requestAnimationFrame(drawWaveform);
+
+  waveCanvas.width  = waveCanvas.offsetWidth  * devicePixelRatio;
+  waveCanvas.height = waveCanvas.offsetHeight * devicePixelRatio;
+  wCtx.scale(devicePixelRatio, devicePixelRatio);
+
+  const W = waveCanvas.offsetWidth;
+  const H = waveCanvas.offsetHeight;
+
+  wCtx.clearRect(0, 0, W, H);
+  wCtx.fillStyle = '#12121c';
+  wCtx.fillRect(0, 0, W, H);
+
+  if (!analyser || !musicState.isSounding) {
+    // Garis datar
+    wCtx.strokeStyle = '#2a2a40';
+    wCtx.lineWidth = 1.5;
+    wCtx.beginPath();
+    wCtx.moveTo(0, H / 2);
+    wCtx.lineTo(W, H / 2);
+    wCtx.stroke();
+    return;
+  }
+
+  const data = analyser.getValue();
+  wCtx.strokeStyle = '#4fc3f7';
+  wCtx.lineWidth = 1.8;
+  wCtx.beginPath();
+
+  for (let i = 0; i < data.length; i++) {
+    const x = (i / data.length) * W;
+    const y = ((data[i] + 1) / 2) * H;
+    if (i === 0) wCtx.moveTo(x, y);
+    else wCtx.lineTo(x, y);
+  }
+  wCtx.stroke();
+}
+
+drawWaveform();
+
+/* ═══════════════════════════════════════════════════════════
+   GAMBAR SKELETON TANGAN
+═══════════════════════════════════════════════════════════ */
+
+// Koneksi standar MediaPipe Hands
+const HAND_CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],       // Jempol
+  [0,5],[5,6],[6,7],[7,8],       // Telunjuk
+  [0,9],[9,10],[10,11],[11,12],  // Tengah
+  [0,13],[13,14],[14,15],[15,16],// Manis
+  [0,17],[17,18],[18,19],[19,20],// Kelingking
+  [5,9],[9,13],[13,17],          // Telapak
+];
+
+function drawHandConnections(landmarks, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  for (const [a, b] of HAND_CONNECTIONS) {
+    ctx.beginPath();
+    ctx.moveTo(landmarks[a].x * canvasEl.width, landmarks[a].y * canvasEl.height);
+    ctx.lineTo(landmarks[b].x * canvasEl.width, landmarks[b].y * canvasEl.height);
+    ctx.stroke();
+  }
+}
+
+function drawHandLandmarks(landmarks, color) {
+  for (let i = 0; i < landmarks.length; i++) {
+    const lm = landmarks[i];
+    const x  = lm.x * canvasEl.width;
+    const y  = lm.y * canvasEl.height;
+    const r  = (i === 0) ? 7 : (i % 4 === 0) ? 5 : 3.5; // wrist lebih besar
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle   = color;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INISIALISASI MEDIAPIPE HANDS
+═══════════════════════════════════════════════════════════ */
+
+let hands = null;
+let camera = null;
+
+function initMediaPipe() {
+  updateCamStatus('Memuat model MediaPipe…', false);
+
+  hands = new Hands({
+    locateFile: (file) => {
+      // Untuk offline: ubah ke `./mediapipe/${file}`
+      return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+    },
+  });
+
+  hands.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.5,
+  });
+
+  hands.onResults(onHandResults);
+
+  camera = new Camera(videoEl, {
+    onFrame: async () => {
+      if (hands) await hands.send({ image: videoEl });
+    },
+    width: 640,
+    height: 480,
+  });
+
+  camera.start()
+    .then(() => {
+      updateCamStatus('Kamera aktif', true);
+    })
+    .catch((err) => {
+      console.error('[GestureSynth] Kamera gagal:', err);
+      updateCamStatus('Kamera gagal: ' + err.message, false);
+    });
+}
+
+function updateCamStatus(msg, isActive) {
+  document.getElementById('cam-status-label').textContent = msg;
+  document.getElementById('cam-dot').classList.toggle('active', isActive);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOMBOL START — memicu Tone.start() + MediaPipe
+═══════════════════════════════════════════════════════════ */
+
+document.getElementById('btn-start').addEventListener('click', async () => {
+  const overlay = document.getElementById('overlay');
+  const btn = document.getElementById('btn-start');
+
+  btn.disabled = true;
+  btn.textContent = 'Memulai…';
+
+  try {
+    // Wajib: resume AudioContext setelah interaksi pengguna
+    await Tone.start();
+    initAudio();
+
+    // Sembunyikan overlay
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.4s';
+    setTimeout(() => { overlay.style.display = 'none'; }, 400);
+
+    // Mulai MediaPipe
+    initMediaPipe();
+
+  } catch (err) {
+    console.error('[GestureSynth] Gagal start:', err);
+    btn.disabled = false;
+    btn.textContent = 'Coba Lagi';
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════
+   KEYBOARD SHORTCUTS (opsional)
+═══════════════════════════════════════════════════════════ */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') silenceAll();
+});
+
+console.log('%c🖐️ GestureSynth Siap!', 'color:#7b5ea7;font-size:16px;font-weight:bold;');
+console.log('Tekan tombol "Mulai Audio & Kamera" untuk memulai.');
+</script>
+</body>
+</html>
